@@ -10,8 +10,12 @@ class SM2Result:
     due_date: date
 
 
-# Map 1-5 user rating to SM-2 quality score (0-5 scale)
-_RATING_TO_QUALITY = {1: 0, 2: 1, 3: 2, 4: 3, 5: 5}
+# Map 1-5 user rating to SM-2 quality score (0-5 scale).
+# q >= 3 is a pass; q < 3 is a fail.
+# rating 3 = minimum pass (q=3, EF decreases slightly)
+# rating 4 = comfortable recall (q=4, EF unchanged)
+# rating 5 = effortless recall (q=5, EF increases)
+_RATING_TO_QUALITY = {1: 0, 2: 1, 3: 3, 4: 4, 5: 5}
 
 
 def apply_sm2(

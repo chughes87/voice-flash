@@ -48,7 +48,7 @@ def get_all_decks() -> list[dict]:
             FROM decks d
             LEFT JOIN cards c ON c.deck_id = d.id
             GROUP BY d.id
-            ORDER BY d.created_at DESC
+            ORDER BY d.created_at DESC, d.id DESC
         """).fetchall()
         return [dict(r) for r in rows]
 
