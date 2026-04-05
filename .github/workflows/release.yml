@@ -1,0 +1,112 @@
+name: Build and Release macOS DMG
+
+on:
+  push:
+    tags:
+      - "v*"           # Trigger on version tags: v1.0.0, v1.2.3, etc.
+  workflow_dispatch:   # Allow manual runs from the Actions tab
+
+jobs:
+  build-macos:
+    name: Build macOS .app and .dmg
+    runs-on: macos-latest   # Apple Silicon (M-series)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          brew install portaudio ffmpeg create-dmg
+
+      - name: Install Python dependencies
+        run: |
+          # CPU-only torch first to avoid downloading the massive CUDA build
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build .app with PyInstaller
+        run: |
+          pyinstaller voice-flash.spec --noconfirm
+
+      # PyInstaller puts the .app in dist/
+      - name: Verify .app was created
+        run: |
+          ls -lh dist/
+          test -d dist/voice-flash.app
+
+      - name: Create .dmg
+        run: |
+          create-dmg \
+            --volname "voice-flash" \
+            --volicon "dist/voice-flash.app/Contents/Resources/icon-windowed.icns" \
+            --window-pos 200 120 \
+            --window-size 600 380 \
+            --icon-size 100 \
+            --icon "voice-flash.app" 175 175 \
+            --hide-extension "voice-flash.app" \
+            --app-drop-link 425 175 \
+            --no-internet-enable \
+            "voice-flash.dmg" \
+            "dist/" \
+          || \
+          create-dmg \
+            --volname "voice-flash" \
+            --window-pos 200 120 \
+            --window-size 600 380 \
+            --icon-size 100 \
+            --icon "voice-flash.app" 175 175 \
+            --hide-extension "voice-flash.app" \
+            --app-drop-link 425 175 \
+            --no-internet-enable \
+            "voice-flash.dmg" \
+            "dist/"
+
+      - name: Get tag name or run ID
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev-$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rename DMG with version
+        run: |
+          mv voice-flash.dmg "voice-flash-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-flash-macos-${{ steps.version.outputs.version }}
+          path: "voice-flash-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "voice-flash ${{ steps.version.outputs.version }}"
+          body: |
+            ## Installation
+
+            1. Download `voice-flash-${{ steps.version.outputs.version }}.dmg`
+            2. Open the DMG and drag **voice-flash** to your Applications folder
+            3. **First launch:** right-click the app and choose **Open** (required once to bypass Gatekeeper on unsigned apps)
+            4. Add your Gemini API key when prompted, or edit `~/.voice-flash.env`
+
+            > **Whisper model:** ~74MB downloads on first launch to `~/.cache/whisper/`. This only happens once.
+
+            ## Requirements
+            - macOS 12 (Monterey) or newer
+            - Apple Silicon or Intel Mac
+            - Free [Gemini API key](https://aistudio.google.com)
+          files: "voice-flash-${{ steps.version.outputs.version }}.dmg"
+          draft: false
+          prerelease: false
+          generate_release_notes: true

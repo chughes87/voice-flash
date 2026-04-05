@@ -90,5 +90,42 @@ class AppWindow(tk.Tk):
         threading.Thread(target=_load, daemon=True).start()
 
     def _on_whisper_loaded(self):
+        from app.config import GEMINI_API_KEY
+        if not GEMINI_API_KEY:
+            self._prompt_api_key()
+        else:
+            from app.gui.deck_screen import DeckScreen
+            self.show_screen(DeckScreen(self))
+
+    def _prompt_api_key(self):
+        from tkinter import simpledialog, messagebox
+        from pathlib import Path
+        import app.config as config
+
+        key = simpledialog.askstring(
+            "Gemini API Key required",
+            "Enter your Gemini API key to enable answer checking.\n\n"
+            "Get a free key at: aistudio.google.com\n",
+            parent=self,
+        )
+        if not key or not key.strip():
+            messagebox.showwarning(
+                "No API key",
+                "Answer checking will be unavailable. "
+                "You can add GEMINI_API_KEY to:\n"
+                f"{config._APP_SUPPORT / '.env'}",
+            )
+        else:
+            key = key.strip()
+            env_path = config._APP_SUPPORT / ".env"
+            env_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(env_path, "w") as f:
+                f.write(f"GEMINI_API_KEY={key}\n")
+            config.GEMINI_API_KEY = key
+            # Re-init checker with the new key
+            from app.services.checker import CheckerService
+            import google.genai as genai
+            self.checker._client = genai.Client(api_key=key)
+
         from app.gui.deck_screen import DeckScreen
         self.show_screen(DeckScreen(self))
